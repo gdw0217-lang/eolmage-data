@@ -1,0 +1,58 @@
+# 얼마게 퀴즈 데이터 갱신
+# 한국소비자원 참가격 파일은 매달 한 번 공공데이터포털에 올라온다. 매일 아침 확인해서 새 파일이 있을 때만 다시 만든다.
+name: update-products
+
+on:
+  schedule:
+    - cron: "0 0 * * *"   # 09:00 KST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update-products
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: 새 참가격 파일 확인·가공
+        run: python scripts/update.py
+
+      - name: 데이터 파일 기록
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/products.json
+          if git diff --cached --quiet; then
+            echo "바뀐 것 없음"
+          else
+            git commit -m "참가격 데이터 갱신 $(TZ=Asia/Seoul date +'%Y-%m-%d')"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
